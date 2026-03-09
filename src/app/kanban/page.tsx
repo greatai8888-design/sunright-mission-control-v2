@@ -3,6 +3,12 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragStartEvent, DragEndEvent,
+  useDroppable, useDraggable,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import { Task, TaskStatus, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -13,13 +19,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-const COLUMNS: { id: TaskStatus; label: string; color: string; emoji: string }[] = [
-  { id: 'backlog',    label: 'Backlog',   color: 'border-t-gray-300',   emoji: '📋' },
-  { id: 'todo',       label: 'To Do',     color: 'border-t-slate-400',  emoji: '📌' },
-  { id: 'pending',    label: 'Pending',   color: 'border-t-orange-400', emoji: '⏳' },
-  { id: 'inprogress', label: 'Ongoing',   color: 'border-t-blue-500',   emoji: '⚡' },
-  { id: 'review',     label: 'Review',    color: 'border-t-yellow-500', emoji: '🔍' },
-  { id: 'done',       label: 'Done',      color: 'border-t-green-500',  emoji: '✅' },
+// ── Column config ──────────────────────────────────────────
+const COLUMNS: { id: TaskStatus; label: string; color: string; bg: string; emoji: string }[] = [
+  { id: 'backlog',    label: 'Backlog',  color: 'border-t-gray-300',   bg: 'bg-gray-50',   emoji: '📋' },
+  { id: 'todo',       label: 'To Do',    color: 'border-t-slate-400',  bg: 'bg-slate-50',  emoji: '📌' },
+  { id: 'pending',    label: 'Pending',  color: 'border-t-orange-400', bg: 'bg-orange-50', emoji: '⏳' },
+  { id: 'inprogress', label: 'Ongoing',  color: 'border-t-blue-500',   bg: 'bg-blue-50',   emoji: '⚡' },
+  { id: 'review',     label: 'Review',   color: 'border-t-yellow-500', bg: 'bg-yellow-50', emoji: '🔍' },
+  { id: 'done',       label: 'Done',     color: 'border-t-green-500',  bg: 'bg-green-50',  emoji: '✅' },
 ]
 
 const TAGS = ['dev', 'marketing', 'trading', 'rnd', 'qa', 'service', 'hr', 'design']
@@ -29,22 +36,164 @@ const PRIORITY_BADGE: Record<string, string> = {
   medium: 'bg-yellow-50 text-yellow-600 border-yellow-200',
   low:    'bg-green-50 text-green-600 border-green-200',
 }
+const PRIORITY_LABEL: Record<string, string> = { high: '高', medium: '中', low: '低' }
+
+const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
+  backlog: 'todo', todo: 'pending', pending: 'inprogress', inprogress: 'review', review: 'done', done: 'backlog',
+}
+const NEXT_LABEL: Record<TaskStatus, string> = {
+  backlog: '→ To Do', todo: '→ Pending', pending: '→ Ongoing', inprogress: '→ Review', review: '→ Done', done: '↺ Backlog',
+}
 
 const EMPTY_FORM = {
   title: '', description: '', tag: 'dev', priority: 'medium',
   assignees: [] as string[], status: 'todo' as TaskStatus, deadline: '',
 }
 
-type FormState = typeof EMPTY_FORM
+// ── Draggable Task Card ────────────────────────────────────
+function TaskCard({
+  task, agents, onEdit, onMove, onDelete, isDragOverlay = false,
+}: {
+  task: Task
+  agents: Agent[]
+  onEdit: (t: Task) => void
+  onMove: (id: string, s: TaskStatus) => void
+  onDelete: (id: string) => void
+  isDragOverlay?: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
 
+  const style = isDragOverlay ? {} : {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.35 : 1,
+  }
+
+  const taskAssignees: string[] = task.assignees || (task.assignee ? [task.assignee] : [])
+
+  return (
+    <div
+      ref={isDragOverlay ? undefined : setNodeRef}
+      style={style}
+      className={`bg-white rounded-lg border border-gray-100 p-2.5 shadow-sm group cursor-grab active:cursor-grabbing select-none
+        ${isDragging ? 'shadow-lg border-blue-200' : 'hover:shadow-md hover:border-gray-200'}
+        ${isDragOverlay ? 'rotate-1 shadow-xl scale-105' : ''}
+        transition-shadow`}
+    >
+      {/* Drag handle area (entire card except action buttons) */}
+      <div
+        {...(!isDragOverlay ? { ...listeners, ...attributes } : {})}
+        onClick={isDragOverlay ? undefined : (e) => { if (!isDragging) onEdit(task) }}
+      >
+        <div className="text-sm font-medium text-gray-900 mb-1.5 leading-snug">{task.title}</div>
+        <div className="flex items-center gap-1 flex-wrap">
+          {task.priority && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${PRIORITY_BADGE[task.priority]}`}>
+              {PRIORITY_LABEL[task.priority] || task.priority}
+            </span>
+          )}
+          {task.tag && <Badge variant="secondary" className="text-xs px-1.5">{task.tag}</Badge>}
+        </div>
+        {taskAssignees.length > 0 && (
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            {taskAssignees.slice(0, 3).map(a => {
+              const ag = agents.find(x => x.name === a)
+              return <span key={a} className="text-xs bg-gray-100 rounded px-1">{ag?.emoji || '👤'} {a}</span>
+            })}
+            {taskAssignees.length > 3 && <span className="text-xs text-gray-400">+{taskAssignees.length - 3}</span>}
+          </div>
+        )}
+        {task.deadline && (
+          <div className="text-xs text-gray-400 mt-1">
+            📅 {new Date(task.deadline).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })}
+          </div>
+        )}
+      </div>
+
+      {/* Quick-action buttons (hidden until hover, not draggable) */}
+      {!isDragOverlay && (
+        <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onMove(task.id, NEXT_STATUS[task.status]) }}
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            {NEXT_LABEL[task.status]}
+          </button>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onDelete(task.id) }}
+            className="text-xs text-gray-300 hover:text-red-500"
+          >✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Droppable Column ───────────────────────────────────────
+function KanbanColumn({
+  col, tasks, agents, onEdit, onMove, onDelete, onAddNew,
+}: {
+  col: typeof COLUMNS[number]
+  tasks: Task[]
+  agents: Agent[]
+  onEdit: (t: Task) => void
+  onMove: (id: string, s: TaskStatus) => void
+  onDelete: (id: string) => void
+  onAddNew: (s: TaskStatus) => void
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: col.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-shrink-0 w-[260px] snap-start rounded-xl border-t-2 ${col.color} p-3 transition-colors duration-150
+        ${isOver ? col.bg + ' border border-blue-300' : 'bg-gray-50'}`}
+    >
+      <div className="flex items-center gap-1.5 mb-3">
+        <span className="text-sm">{col.emoji}</span>
+        <span className="font-semibold text-gray-700 text-sm">{col.label}</span>
+        <span className="ml-auto text-xs bg-white border rounded-full px-2 py-0.5 text-gray-400">{tasks.length}</span>
+      </div>
+      <div className="space-y-2 min-h-[60px]">
+        {tasks.map(t => (
+          <TaskCard
+            key={t.id}
+            task={t}
+            agents={agents}
+            onEdit={onEdit}
+            onMove={onMove}
+            onDelete={onDelete}
+          />
+        ))}
+        <button
+          onClick={() => onAddNew(col.id)}
+          className="w-full text-xs text-gray-400 hover:text-gray-600 py-1.5 rounded-lg border border-dashed border-gray-200 hover:border-gray-300 transition-colors"
+        >
+          + 新增
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Page ──────────────────────────────────────────────
 export default function KanbanPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM)
   const [expandedDesc, setExpandedDesc] = useState(false)
+  const [activeTask, setActiveTask] = useState<Task | null>(null)   // for DragOverlay
+
+  // Sensors: pointer (mouse+touch). 
+  // delay=200ms on touch prevents accidental drags while scrolling.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -59,6 +208,31 @@ export default function KanbanPage() {
 
   useEffect(() => { load() }, [load])
 
+  // ── Drag handlers ──────────────────────────────────────
+  function handleDragStart(event: DragStartEvent) {
+    const task = tasks.find(t => t.id === event.active.id)
+    setActiveTask(task || null)
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    setActiveTask(null)
+    if (!over) return
+    const taskId   = active.id as string
+    const newStatus = over.id as TaskStatus
+    const task = tasks.find(t => t.id === taskId)
+    if (!task || task.status === newStatus) return
+
+    // Optimistic UI update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
+    await fetch('/api/tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId, status: newStatus }),
+    })
+  }
+
+  // ── Task CRUD ──────────────────────────────────────────
   function openNew(status: TaskStatus = 'todo') {
     setEditing(null)
     setForm({ ...EMPTY_FORM, status })
@@ -103,14 +277,15 @@ export default function KanbanPage() {
   }
 
   async function moveTask(id: string, status: TaskStatus) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t))
     await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
-    load()
   }
 
   async function deleteTask(id: string) {
     if (!confirm('刪除此任務？')) return
+    setTasks(prev => prev.filter(t => t.id !== id))
     await fetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
-    load()
+    setOpen(false)
   }
 
   function toggleAssignee(name: string) {
@@ -122,19 +297,12 @@ export default function KanbanPage() {
     }))
   }
 
-  const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
-    backlog: 'todo', todo: 'pending', pending: 'inprogress', inprogress: 'review', review: 'done', done: 'backlog'
-  }
-  const NEXT_LABEL: Record<TaskStatus, string> = {
-    backlog: '→ To Do', todo: '→ Pending', pending: '→ Ongoing', inprogress: '→ Review', review: '→ Done', done: '↺ Backlog'
-  }
-
   return (
     <div className="p-4 md:p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">🗂 Kanban</h1>
-          <p className="text-sm text-gray-500 mt-0.5">6 欄看板 · 12 Agents · Supabase</p>
+          <p className="text-sm text-gray-500 mt-0.5">6 欄看板 · 12 Agents · 拖移可換欄</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => openNew()}>+ 新增任務</Button>
@@ -145,102 +313,68 @@ export default function KanbanPage() {
       {loading ? (
         <div className="text-center py-20 text-gray-400">載入中...</div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory" style={{ minWidth: 0 }}>
-          {COLUMNS.map(col => {
-            const colTasks = tasks.filter(t => t.status === col.id)
-            return (
-              <div key={col.id} className={`flex-shrink-0 w-[260px] snap-start bg-gray-50 rounded-xl border-t-2 ${col.color} p-3`}>
-                <div className="flex items-center gap-1.5 mb-3">
-                  <span className="text-sm">{col.emoji}</span>
-                  <span className="font-semibold text-gray-700 text-sm">{col.label}</span>
-                  <span className="ml-auto text-xs bg-white border rounded-full px-2 py-0.5 text-gray-400">{colTasks.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {colTasks.map(t => {
-                    const taskAssignees: string[] = t.assignees || (t.assignee ? [t.assignee] : [])
-                    return (
-                      <div key={t.id} className="bg-white rounded-lg border border-gray-100 p-2.5 shadow-sm group cursor-pointer"
-                        onClick={() => openEdit(t)}>
-                        <div className="text-sm font-medium text-gray-900 mb-1.5">{t.title}</div>
-                        {t.description && !t.description && <p className="text-xs text-gray-400 mb-1.5 line-clamp-2">{t.description}</p>}
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {t.priority && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${PRIORITY_BADGE[t.priority]}`}>
-                              {t.priority === 'high' ? '高' : t.priority === 'medium' ? '中' : '低'}
-                            </span>
-                          )}
-                          {t.tag && <Badge variant="secondary" className="text-xs px-1.5">{t.tag}</Badge>}
-                        </div>
-                        {taskAssignees.length > 0 && (
-                          <div className="flex gap-1 mt-1.5 flex-wrap">
-                            {taskAssignees.slice(0, 3).map(a => {
-                              const ag = agents.find(x => x.name === a)
-                              return <span key={a} className="text-xs bg-gray-100 rounded px-1">{ag?.emoji || '👤'} {a}</span>
-                            })}
-                            {taskAssignees.length > 3 && <span className="text-xs text-gray-400">+{taskAssignees.length - 3}</span>}
-                          </div>
-                        )}
-                        {t.deadline && (
-                          <div className="text-xs text-gray-400 mt-1">📅 {new Date(t.deadline).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })}</div>
-                        )}
-                        <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={e => { e.stopPropagation(); moveTask(t.id, NEXT_STATUS[t.status]) }}
-                            className="text-xs text-blue-500 hover:text-blue-700"
-                          >{NEXT_LABEL[t.status]}</button>
-                          <button
-                            onClick={e => { e.stopPropagation(); deleteTask(t.id) }}
-                            className="text-xs text-gray-300 hover:text-red-500"
-                          >✕</button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <button
-                    onClick={() => openNew(col.id)}
-                    className="w-full text-xs text-gray-400 hover:text-gray-600 py-1.5 rounded-lg border border-dashed border-gray-200 hover:border-gray-300 transition-colors"
-                  >+ 新增</button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory" style={{ minWidth: 0 }}>
+            {COLUMNS.map(col => (
+              <KanbanColumn
+                key={col.id}
+                col={col}
+                tasks={tasks.filter(t => t.status === col.id)}
+                agents={agents}
+                onEdit={openEdit}
+                onMove={moveTask}
+                onDelete={deleteTask}
+                onAddNew={openNew}
+              />
+            ))}
+          </div>
+
+          {/* Drag overlay: rendered above everything while dragging */}
+          <DragOverlay>
+            {activeTask ? (
+              <TaskCard
+                task={activeTask}
+                agents={agents}
+                onEdit={() => {}}
+                onMove={() => {}}
+                onDelete={() => {}}
+                isDragOverlay
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
-      {/* Task Modal */}
+      {/* ── Task Modal ── */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? '編輯任務' : '新增任務'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {/* Title */}
             <div>
               <Label>標題 *</Label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                placeholder="任務名稱" />
+              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="任務名稱" />
             </div>
-
-            {/* Description expandable */}
             <div>
               <button className="text-xs text-blue-500 mb-1" onClick={() => setExpandedDesc(x => !x)}>
                 {expandedDesc ? '▲ 收起描述' : '▼ 展開描述'}
               </button>
               {expandedDesc && (
                 <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="詳細說明、SOP..." rows={4} />
+                  placeholder="詳細說明..." rows={4} />
               )}
             </div>
-
-            {/* Tag + Priority */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Tag</Label>
                 <Select value={form.tag || 'dev'} onValueChange={v => setForm(f => ({ ...f, tag: v || 'dev' }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -255,16 +389,12 @@ export default function KanbanPage() {
                 </Select>
               </div>
             </div>
-
-            {/* Status + Deadline */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>欄位</Label>
                 <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: (v || 'todo') as TaskStatus }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.emoji} {c.label}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.emoji} {c.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -272,8 +402,6 @@ export default function KanbanPage() {
                 <Input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
               </div>
             </div>
-
-            {/* Assignees — 12 agent chips */}
             <div>
               <Label>指派人（多選）</Label>
               <div className="flex flex-wrap gap-1.5 mt-1.5 p-2 bg-gray-50 rounded-lg border border-gray-100">
@@ -290,7 +418,6 @@ export default function KanbanPage() {
                 })}
               </div>
             </div>
-
             <div className="flex gap-2 pt-1">
               {editing && (
                 <Button variant="destructive" className="flex-shrink-0" onClick={async () => { await deleteTask(editing.id); setOpen(false) }}>刪除</Button>
