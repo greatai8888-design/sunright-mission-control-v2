@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Agent, DashboardStats } from '@/types'
+import { AgentTaskDrawer } from '@/components/AgentTaskDrawer'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
   active:  { label: '運作中', color: 'text-green-600 border-green-200 bg-green-50',   dot: 'bg-green-500' },
@@ -20,8 +21,9 @@ export default function DashboardPage() {
     tasks: { backlog: 0, todo: 0, pending: 0, inprogress: 0, review: 0, done: 0, total: 0 },
     agents: { total: 0, active: 0 },
   })
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [loading, setLoading] = useState(true)
+  const [agents,      setAgents]      = useState<Agent[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [activeAgent, setActiveAgent] = useState<Agent | null>(null)
 
   const load = useCallback(async () => {
     const [{ data: tasks }, { data: agentsData }] = await Promise.all([
@@ -50,16 +52,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load()
-
-    // Realtime subscription for agent status changes
     if (typeof window === 'undefined') return
     const channel = supabase
       .channel('agents-status')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agents' }, () => {
-        load()
-      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agents' }, () => { load() })
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [load])
 
@@ -86,7 +83,7 @@ export default function DashboardPage() {
         {statCards.map((s) => (
           <Card key={s.label}>
             <CardContent className="pt-5">
-              <div className="text-2xl mb-1">{s.icon}</div>
+              <div className="text-2xl mb-1" style={{ fontFamily: 'initial' }}>{s.icon}</div>
               <div className={`text-3xl font-bold ${s.color}`}>
                 {loading ? '—' : s.value}
               </div>
@@ -107,7 +104,7 @@ export default function DashboardPage() {
             <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700"
               style={{ width: `${donePct}%` }} />
           </div>
-          <div className="flex gap-4 mt-2 text-xs text-gray-400 flex-wrap">
+          <div className="flex gap-3 mt-2 text-xs text-gray-400 flex-wrap">
             <span>📋 Backlog {stats.tasks.backlog}</span>
             <span>📌 To Do {stats.tasks.todo}</span>
             <span>⏳ Pending {stats.tasks.pending}</span>
@@ -125,22 +122,34 @@ export default function DashboardPage() {
           <Badge variant="secondary" className="text-xs">Realtime</Badge>
           <span className="text-xs text-gray-400 ml-auto">{stats.agents.active} / {stats.agents.total} 上線</span>
         </div>
+        <p className="text-xs text-gray-400 mb-3">點擊任意 Agent 查看其任務</p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {loading
             ? Array.from({ length: 12 }).map((_, i) => (
-                <Card key={i}><CardContent className="pt-4 pb-4 h-16 bg-gray-50 animate-pulse rounded-xl" /></Card>
+                <Card key={i}><CardContent className="pt-4 pb-4 h-20 bg-gray-50 animate-pulse rounded-xl" /></Card>
               ))
             : agents.map((a) => {
                 const cfg = STATUS_CONFIG[a.status] || STATUS_CONFIG.idle
                 return (
-                  <Card key={a.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="pt-4 pb-4 flex items-center gap-3">
-                      <span className="text-2xl flex-shrink-0">{a.emoji}</span>
-                      <div className="min-w-0">
+                  <Card
+                    key={a.id}
+                    className="hover:shadow-md transition-all cursor-pointer active:scale-[0.98] hover:border-gray-200"
+                    onClick={() => setActiveAgent(a)}
+                  >
+                    <CardContent className="pt-4 pb-4 flex items-start gap-3">
+                      {/* Emoji — reset font to avoid gray-box rendering */}
+                      <span
+                        className="text-2xl flex-shrink-0 leading-none mt-0.5"
+                        style={{ fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif' }}
+                      >
+                        {a.emoji}
+                      </span>
+                      <div className="min-w-0 flex-1">
                         <div className="font-semibold text-gray-900 text-sm">{a.name}</div>
-                        <div className="text-xs text-gray-400 truncate">{a.role}</div>
-                        <div className={`inline-flex items-center gap-1 mt-1 text-xs px-1.5 py-0.5 rounded-full border ${cfg.color}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                        {/* role — allow 2 lines instead of truncate */}
+                        <div className="text-xs text-gray-400 leading-tight mt-0.5 line-clamp-2">{a.role}</div>
+                        <div className={`inline-flex items-center gap-1 mt-1.5 text-xs px-1.5 py-0.5 rounded-full border ${cfg.color}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
                           {cfg.label}
                         </div>
                       </div>
@@ -150,6 +159,12 @@ export default function DashboardPage() {
               })}
         </div>
       </div>
+
+      {/* Agent Task Drawer */}
+      <AgentTaskDrawer
+        agent={activeAgent}
+        onClose={() => setActiveAgent(null)}
+      />
     </div>
   )
 }
