@@ -371,7 +371,7 @@ export default function AnalyticsPage() {
                           <div className="text-sm font-medium text-gray-900 truncate">{post.brand}</div>
                           <div className="text-xs text-gray-400 truncate">{post.caption.slice(0, 30)}...</div>
                         </div>
-                        <Badge variant="outline" className="text-xs text-green-600 border-green-200">{post.eng}</Badge>
+                        <Badge variant="outline" className="text-xs text-green-600 border-green-200">Eng {post.eng}</Badge>
                       </div>
                     ))}
                   </div>
