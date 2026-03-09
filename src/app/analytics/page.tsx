@@ -26,6 +26,7 @@ interface Competitor {
   engagement_rate: number
   last_post_date: string
   profile_pic_url?: string
+  logo_url?: string
 }
 
 // ─── Sunright own data (mock until IG API) ────────────────
@@ -266,7 +267,7 @@ export default function AnalyticsPage() {
                               <td className="px-2 py-2.5 text-xs text-gray-400">{c.thisWeekRank}</td>
                               <td className="px-2 py-2.5">
                                 <div className="flex items-center gap-2">
-                                  <Avatar name={c.name} url={c.profile_pic_url} size={28} />
+                                  <Avatar name={c.name} url={c.logo_url || c.profile_pic_url} size={28} />
                                   <div>
                                     <div className="font-medium text-gray-900 text-sm">{c.name.split(' ').slice(0, 2).join(' ')}</div>
                                     <div className="text-xs text-gray-400">@{c.handle}</div>

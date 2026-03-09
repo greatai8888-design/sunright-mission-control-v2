@@ -1,7 +1,8 @@
--- Add profile_pic_url column to competitors table
+-- Add profile_pic_url and logo_url columns to competitors table
 -- Run this in Supabase SQL Editor
 
 ALTER TABLE competitors ADD COLUMN IF NOT EXISTS profile_pic_url TEXT;
+ALTER TABLE competitors ADD COLUMN IF NOT EXISTS logo_url TEXT;
 
 -- Update the competitor_latest view to include profile_pic_url
 DROP VIEW IF EXISTS competitor_latest;
@@ -13,6 +14,7 @@ SELECT
   c.platform,
   c.notes,
   c.profile_pic_url,
+  c.logo_url,
   cs.followers,
   cs.avg_likes,
   cs.avg_comments,
@@ -32,3 +34,4 @@ LEFT JOIN LATERAL (
 GRANT SELECT ON competitor_latest TO anon, authenticated;
 
 COMMENT ON COLUMN competitors.profile_pic_url IS 'Instagram profile picture URL, populated by Iris scraper';
+COMMENT ON COLUMN competitors.logo_url IS 'Brand logo URL for display in rankings table';
