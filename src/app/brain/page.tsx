@@ -5,176 +5,283 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { KnowledgeEntry } from '@/types'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+const TABS = [
+  { key: 'all',       label: '📋 全部',     filter: null },
+  { key: 'ops',       label: '🏢 營運',     filter: 'ops' },
+  { key: 'dev',       label: '💻 技術',     filter: 'dev' },
+  { key: 'marketing', label: '📣 行銷',     filter: 'marketing' },
+  { key: 'finance',   label: '💰 財務',     filter: 'finance' },
+] as const
+
+type TabKey = typeof TABS[number]['key']
 
 const CAT_COLOR: Record<string, string> = {
-  monitoring: 'bg-purple-50 text-purple-700 border-purple-200',
+  ops:        'bg-amber-50 text-amber-700 border-amber-200',
   dev:        'bg-blue-50 text-blue-700 border-blue-200',
   marketing:  'bg-green-50 text-green-700 border-green-200',
-  ops:        'bg-yellow-50 text-yellow-700 border-yellow-200',
-  finance:    'bg-red-50 text-red-700 border-red-200',
+  finance:    'bg-purple-50 text-purple-700 border-purple-200',
+  monitoring: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   general:    'bg-gray-50 text-gray-600 border-gray-200',
 }
 
-const CATEGORIES = ['general', 'ops', 'dev', 'monitoring', 'marketing', 'finance']
+const CATEGORIES = ['general', 'ops', 'dev', 'marketing', 'finance', 'monitoring']
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+}
 
 export default function BrainPage() {
-  const [entries, setEntries] = useState<KnowledgeEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ title: '', content: '', category: 'general', tags: '' })
+  const [entries,   setEntries]   = useState<KnowledgeEntry[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [tab,       setTab]       = useState<TabKey>('all')
+  const [query,     setQuery]     = useState('')
+  const [expanded,  setExpanded]  = useState<string | null>(null)
+  const [addOpen,   setAddOpen]   = useState(false)
+  const [form,      setForm]      = useState({ title: '', content: '', category: 'ops', tags: '', source: '' })
+  const [saving,    setSaving]    = useState(false)
 
-  const load = useCallback(async (q = '') => {
+  const load = useCallback(async (q = '', cat: string | null = null) => {
     setLoading(true)
     let qb = supabase.from('knowledge_entries').select('*').order('created_at', { ascending: false })
-    if (q.trim()) {
-      qb = qb.or(`title.ilike.%${q}%,content.ilike.%${q}%`)
-    }
-    const { data } = await qb.limit(50)
+    if (cat) qb = qb.eq('category', cat)
+    if (q.trim()) qb = qb.or(`title.ilike.%${q}%,content.ilike.%${q}%`)
+    const { data } = await qb.limit(100)
     setEntries(data || [])
     setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const currentFilter = TABS.find(t => t.key === tab)?.filter ?? null
+
+  useEffect(() => { load(query, currentFilter) }, [tab])
 
   useEffect(() => {
-    const t = setTimeout(() => load(query), 300)
+    const t = setTimeout(() => load(query, currentFilter), 300)
     return () => clearTimeout(t)
-  }, [query, load])
+  }, [query])
 
-  async function addEntry() {
+  async function handleAdd() {
     if (!form.title.trim()) return
+    setSaving(true)
     const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
-    await supabase.from('knowledge_entries').insert({
-      title: form.title.trim(),
-      content: form.content.trim(),
-      category: form.category,
-      tags,
-      source: 'manual',
+    const res = await fetch('/api/brain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: form.title.trim(),
+        content: form.content.trim(),
+        category: form.category,
+        tags,
+        source: form.source.trim() || 'manual',
+      }),
     })
-    setOpen(false)
-    setForm({ title: '', content: '', category: 'general', tags: '' })
-    load(query)
+    setSaving(false)
+    if (res.ok) {
+      setAddOpen(false)
+      setForm({ title: '', content: '', category: 'ops', tags: '', source: '' })
+      load(query, currentFilter)
+    }
   }
 
-  async function deleteEntry(id: string) {
+  async function handleDelete(id: string) {
     if (!confirm('刪除此條目？')) return
-    await supabase.from('knowledge_entries').delete().eq('id', id)
-    load(query)
+    await fetch('/api/brain', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    load(query, currentFilter)
   }
 
-  function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+  const counts = {
+    all:       entries.length,
+    ops:       entries.filter(e => e.category === 'ops').length,
+    dev:       entries.filter(e => e.category === 'dev').length,
+    marketing: entries.filter(e => e.category === 'marketing').length,
+    finance:   entries.filter(e => e.category === 'finance').length,
   }
 
   return (
     <div className="p-6 space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🧠 Second Brain</h1>
-          <p className="text-sm text-gray-500 mt-0.5">知識庫 · Supabase PostgreSQL + 全文搜尋</p>
+          <p className="text-sm text-gray-500 mt-0.5">Sunright AI 知識庫 · {entries.length} 條目</p>
         </div>
-        <Button onClick={() => setOpen(true)}>+ 新增知識</Button>
+        <button
+          onClick={() => setAddOpen(true)}
+          className="text-sm px-4 py-2 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+        >
+          + 新增條目
+        </button>
       </div>
 
       {/* Search */}
-      <Input
+      <input
+        type="text"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="🔍 搜尋知識庫（標題、內容）..."
-        className="max-w-xl"
+        placeholder="🔍 搜尋知識庫..."
+        className="w-full max-w-md px-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
       />
 
-      {/* Count */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">知識條目</span>
-        <Badge variant="secondary">{entries.length}</Badge>
-        {query && <span className="text-xs text-gray-400">搜尋：「{query}」</span>}
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-100">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition whitespace-nowrap ${
+              tab === t.key
+                ? 'bg-white text-gray-900 border border-b-white border-gray-100 -mb-px'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${tab === t.key ? 'bg-gray-100 text-gray-600' : 'text-gray-400'}`}>
+              {counts[t.key as keyof typeof counts] ?? 0}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Entries */}
       {loading ? (
-        <div className="space-y-3">
-          {[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
+        <div className="grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+          ))}
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="py-16 text-center text-gray-400">
           <div className="text-4xl mb-3">🧠</div>
-          <div>{query ? '找不到相關條目' : '暫無知識條目，點「+ 新增知識」開始建立'}</div>
+          <div className="font-medium text-gray-600">尚無條目</div>
+          <p className="text-sm mt-1">點擊「新增條目」開始建立知識庫</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
           {entries.map(e => (
-            <div key={e.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm group">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="font-semibold text-gray-900 mb-1">{e.title}</div>
-                  <div className="text-sm text-gray-600 leading-relaxed">{e.content}</div>
-                  <div className="flex items-center gap-2 flex-wrap mt-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${CAT_COLOR[e.category] || CAT_COLOR.general}`}>
-                      {e.category}
-                    </span>
-                    {(e.tags || []).map(t => (
-                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-gray-50 border border-gray-200 text-gray-500">
-                        #{t}
-                      </span>
-                    ))}
-                    <span className="text-xs text-gray-300 ml-auto">{fmtDate(e.created_at)}</span>
-                  </div>
-                </div>
+            <div
+              key={e.id}
+              className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition cursor-pointer"
+              onClick={() => setExpanded(expanded === e.id ? null : e.id)}
+            >
+              {/* Title row */}
+              <div className="flex items-start gap-2 justify-between">
+                <div className="font-semibold text-gray-900 text-sm leading-snug">{e.title}</div>
+                <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${CAT_COLOR[e.category] || CAT_COLOR.general}`}>
+                  {e.category}
+                </span>
+              </div>
+
+              {/* Content preview / full */}
+              <p className={`text-sm text-gray-500 mt-2 leading-relaxed whitespace-pre-wrap ${
+                expanded === e.id ? '' : 'line-clamp-2'
+              }`}>
+                {e.content}
+              </p>
+
+              {/* Tags + meta */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {(e.tags || []).slice(0, 3).map(tag => (
+                  <span key={tag} className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                    #{tag}
+                  </span>
+                ))}
+                {(e.tags || []).length > 3 && (
+                  <span className="text-xs text-gray-300">+{e.tags.length - 3}</span>
+                )}
+                <span className="text-xs text-gray-300 ml-auto">{fmtDate(e.created_at)}</span>
                 <button
-                  onClick={() => deleteEntry(e.id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 text-lg leading-none flex-shrink-0"
-                >✕</button>
+                  onClick={ev => { ev.stopPropagation(); handleDelete(e.id) }}
+                  className="text-xs text-red-400 hover:text-red-600 ml-1"
+                >
+                  刪除
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Add Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>新增知識條目</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>標題 *</Label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="知識標題" />
-            </div>
-            <div>
-              <Label>內容（SOP、筆記、規則...）</Label>
-              <Textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-                placeholder="詳細說明..." rows={4} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+      {/* Add modal */}
+      {addOpen && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-900">新增知識條目</h2>
+
+            <div className="space-y-3">
               <div>
-                <Label>分類</Label>
-                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v || 'general' }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <label className="text-xs font-medium text-gray-600 block mb-1">標題 *</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="條目標題"
+                />
               </div>
               <div>
-                <Label>標籤（逗號分隔）</Label>
-                <Input value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="sop, monitoring" />
+                <label className="text-xs font-medium text-gray-600 block mb-1">內容</label>
+                <textarea
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
+                  rows={5}
+                  value={form.content}
+                  onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder="詳細內容..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">分類</label>
+                  <select
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    value={form.category}
+                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                  >
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">來源</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    value={form.source}
+                    onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
+                    placeholder="manual / doc / orion"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">標籤（逗號分隔）</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.tags}
+                  onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
+                  placeholder="strategy, sop, brand"
+                />
               </div>
             </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>取消</Button>
-              <Button className="flex-1" onClick={addEntry}>新增</Button>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => setAddOpen(false)}
+                className="px-4 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={saving || !form.title.trim()}
+                className="px-4 py-2 text-sm bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 transition"
+              >
+                {saving ? '儲存中…' : '儲存'}
+              </button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   )
 }

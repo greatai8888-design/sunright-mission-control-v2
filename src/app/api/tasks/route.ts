@@ -17,9 +17,23 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
+// Known task columns — strip unknown fields gracefully (e.g. when schema migration is pending)
+const TASK_BASE_COLS = ['title', 'description', 'status', 'priority', 'assignee', 'tag',
+                        'position', 'project_id', 'created_at', 'updated_at']
+const TASK_EXTRA_COLS = ['assignees', 'deadline']
+
+function safeTaskBody(body: Record<string, unknown>, includeExtras = true) {
+  const allowed = includeExtras ? [...TASK_BASE_COLS, ...TASK_EXTRA_COLS] : TASK_BASE_COLS
+  return Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { data, error } = await admin.from('tasks').insert(body).select().single()
+  // Try with all columns first; fallback to base cols if schema not yet migrated
+  let { data, error } = await admin.from('tasks').insert(safeTaskBody(body)).select().single()
+  if (error?.code === 'PGRST204') {
+    ;({ data, error } = await admin.from('tasks').insert(safeTaskBody(body, false)).select().single())
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -27,9 +41,12 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { id, ...updates } = await req.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const { data, error } = await admin.from('tasks').update({
-    ...updates, updated_at: new Date().toISOString()
-  }).eq('id', id).select().single()
+  const patchBody = { ...safeTaskBody(updates), updated_at: new Date().toISOString() }
+  let { data, error } = await admin.from('tasks').update(patchBody).eq('id', id).select().single()
+  if (error?.code === 'PGRST204') {
+    const fallback = { ...safeTaskBody(updates, false), updated_at: new Date().toISOString() }
+    ;({ data, error } = await admin.from('tasks').update(fallback).eq('id', id).select().single())
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
