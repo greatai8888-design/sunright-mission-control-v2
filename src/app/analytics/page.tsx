@@ -151,9 +151,9 @@ export default function AnalyticsPage() {
     ...competitors.map(c => ({ ...c, isSunright: false })),
   ]
 
-  const days = Array.from({ length: 30 }, (_, i) => {
+  const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date()
-    d.setDate(d.getDate() - (29 - i))
+    d.setDate(d.getDate() - (6 - i))
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   })
 
@@ -327,7 +327,7 @@ export default function AnalyticsPage() {
 
           {/* ③ Follower Trend Chart */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Follower Trend — Last 30 Days</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Follower Trend — Last 7 Days</h2>
             <div className="bg-white border border-gray-100 rounded-2xl p-4 md:p-5 shadow-sm">
               {/* Brand selector */}
               <div className="flex flex-wrap gap-2 mb-5">
@@ -359,7 +359,7 @@ export default function AnalyticsPage() {
                   <XAxis
                     dataKey="day"
                     tick={{ fontSize: 10, fill: '#9ca3af' }}
-                    interval={6}
+                    interval={0}
                     tickLine={false}
                   />
                   <YAxis
