@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-// ── Column config ──────────────────────────────────────────
+// ── Column config (excluding archived) ─────────────────────
 const COLUMNS: { id: TaskStatus; label: string; color: string; bg: string; emoji: string }[] = [
   { id: 'backlog',    label: 'Backlog',  color: 'border-t-gray-300',   bg: 'bg-gray-50',   emoji: '📋' },
   { id: 'todo',       label: 'To Do',    color: 'border-t-slate-400',  bg: 'bg-slate-50',  emoji: '📌' },
@@ -38,11 +38,11 @@ const PRIORITY_BADGE: Record<string, string> = {
 }
 const PRIORITY_LABEL: Record<string, string> = { high: '高', medium: '中', low: '低' }
 
-const NEXT_STATUS: Record<TaskStatus, TaskStatus> = {
-  backlog: 'todo', todo: 'pending', pending: 'inprogress', inprogress: 'review', review: 'done', done: 'backlog',
+const NEXT_STATUS: Record<string, TaskStatus> = {
+  backlog: 'todo', todo: 'pending', pending: 'inprogress', inprogress: 'review', review: 'done', done: 'backlog', archived: 'backlog',
 }
-const NEXT_LABEL: Record<TaskStatus, string> = {
-  backlog: '→ To Do', todo: '→ Pending', pending: '→ Ongoing', inprogress: '→ Review', review: '→ Done', done: '↺ Backlog',
+const NEXT_LABEL: Record<string, string> = {
+  backlog: '→ To Do', todo: '→ Pending', pending: '→ Ongoing', inprogress: '→ Review', review: '→ Done', done: '↺ Backlog', archived: '還原',
 }
 
 const EMPTY_FORM = {
@@ -52,13 +52,14 @@ const EMPTY_FORM = {
 
 // ── Draggable Task Card ────────────────────────────────────
 function TaskCard({
-  task, agents, onEdit, onMove, onDelete, isDragOverlay = false,
+  task, agents, onEdit, onMove, onDelete, onArchive, isDragOverlay = false,
 }: {
   task: Task
   agents: Agent[]
   onEdit: (t: Task) => void
   onMove: (id: string, s: TaskStatus) => void
   onDelete: (id: string) => void
+  onArchive?: (id: string) => void
   isDragOverlay?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
@@ -69,6 +70,8 @@ function TaskCard({
   }
 
   const taskAssignees: string[] = task.assignees || (task.assignee ? [task.assignee] : [])
+  const isDone = task.status === 'done'
+  const isArchived = task.status === 'archived'
 
   return (
     <div
@@ -77,9 +80,10 @@ function TaskCard({
       className={`bg-white rounded-lg border border-gray-100 p-2.5 shadow-sm group cursor-grab active:cursor-grabbing select-none
         ${isDragging ? 'shadow-lg border-blue-200' : 'hover:shadow-md hover:border-gray-200'}
         ${isDragOverlay ? 'rotate-1 shadow-xl scale-105' : ''}
+        ${isArchived ? 'opacity-70' : ''}
         transition-shadow`}
     >
-      {/* Drag handle area (entire card except action buttons) */}
+      {/* Drag handle area */}
       <div
         {...(!isDragOverlay ? { ...listeners, ...attributes } : {})}
         onClick={isDragOverlay ? undefined : (e) => { if (!isDragging) onEdit(task) }}
@@ -109,16 +113,28 @@ function TaskCard({
         )}
       </div>
 
-      {/* Quick-action buttons (hidden until hover, not draggable) */}
+      {/* Quick-action buttons */}
       {!isDragOverlay && (
         <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); onMove(task.id, NEXT_STATUS[task.status]) }}
-            className="text-xs text-blue-500 hover:text-blue-700"
-          >
-            {NEXT_LABEL[task.status]}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onMove(task.id, NEXT_STATUS[task.status]) }}
+              className="text-xs text-blue-500 hover:text-blue-700"
+            >
+              {NEXT_LABEL[task.status]}
+            </button>
+            {/* Archive button for Done tasks */}
+            {isDone && onArchive && (
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onArchive(task.id) }}
+                className="text-xs text-gray-400 hover:text-amber-600"
+              >
+                📦 封存
+              </button>
+            )}
+          </div>
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); onDelete(task.id) }}
@@ -132,7 +148,7 @@ function TaskCard({
 
 // ── Droppable Column ───────────────────────────────────────
 function KanbanColumn({
-  col, tasks, agents, onEdit, onMove, onDelete, onAddNew,
+  col, tasks, agents, onEdit, onMove, onDelete, onArchive, onAddNew,
 }: {
   col: typeof COLUMNS[number]
   tasks: Task[]
@@ -140,6 +156,7 @@ function KanbanColumn({
   onEdit: (t: Task) => void
   onMove: (id: string, s: TaskStatus) => void
   onDelete: (id: string) => void
+  onArchive: (id: string) => void
   onAddNew: (s: TaskStatus) => void
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: col.id })
@@ -164,6 +181,7 @@ function KanbanColumn({
             onEdit={onEdit}
             onMove={onMove}
             onDelete={onDelete}
+            onArchive={col.id === 'done' ? onArchive : undefined}
           />
         ))}
         <button
@@ -177,6 +195,86 @@ function KanbanColumn({
   )
 }
 
+// ── Archive Section ────────────────────────────────────────
+function ArchiveSection({
+  tasks, agents, onEdit, onRestore, onDelete, expanded, onToggle,
+}: {
+  tasks: Task[]
+  agents: Agent[]
+  onEdit: (t: Task) => void
+  onRestore: (id: string) => void
+  onDelete: (id: string) => void
+  expanded: boolean
+  onToggle: () => void
+}) {
+  if (tasks.length === 0 && !expanded) return null
+
+  return (
+    <div className="mt-6 border-t border-gray-100 pt-4">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 mb-3"
+      >
+        <span className="text-base">{expanded ? '▼' : '▶'}</span>
+        <span>📦 Archive</span>
+        <span className="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">{tasks.length}</span>
+      </button>
+
+      {expanded && (
+        <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
+          {tasks.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">沒有已封存的任務</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {tasks.map(t => {
+                const taskAssignees: string[] = t.assignees || (t.assignee ? [t.assignee] : [])
+                return (
+                  <div
+                    key={t.id}
+                    className="bg-white rounded-lg border border-gray-100 p-2.5 shadow-sm opacity-70 hover:opacity-100 transition group"
+                  >
+                    <div className="text-sm font-medium text-gray-700 mb-1 line-clamp-2 cursor-pointer" onClick={() => onEdit(t)}>
+                      {t.title}
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap mb-2">
+                      {t.priority && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full border ${PRIORITY_BADGE[t.priority]}`}>
+                          {PRIORITY_LABEL[t.priority]}
+                        </span>
+                      )}
+                      {t.tag && <Badge variant="secondary" className="text-xs px-1.5">{t.tag}</Badge>}
+                    </div>
+                    {taskAssignees.length > 0 && (
+                      <div className="flex gap-1 mb-2 flex-wrap">
+                        {taskAssignees.slice(0, 2).map(a => {
+                          const ag = agents.find(x => x.name === a)
+                          return <span key={a} className="text-xs bg-gray-100 rounded px-1">{ag?.emoji || '👤'}</span>
+                        })}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => onRestore(t.id)}
+                        className="text-xs text-blue-500 hover:text-blue-700"
+                      >
+                        ↩ 還原
+                      </button>
+                      <button
+                        onClick={() => onDelete(t.id)}
+                        className="text-xs text-gray-300 hover:text-red-500"
+                      >✕</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────
 export default function KanbanPage() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -186,10 +284,9 @@ export default function KanbanPage() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM)
   const [expandedDesc, setExpandedDesc] = useState(false)
-  const [activeTask, setActiveTask] = useState<Task | null>(null)   // for DragOverlay
+  const [activeTask, setActiveTask] = useState<Task | null>(null)
+  const [archiveExpanded, setArchiveExpanded] = useState(false)
 
-  // Sensors: pointer (mouse+touch). 
-  // delay=200ms on touch prevents accidental drags while scrolling.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -208,7 +305,6 @@ export default function KanbanPage() {
 
   useEffect(() => { load() }, [load])
 
-  // ── Drag handlers ──────────────────────────────────────
   function handleDragStart(event: DragStartEvent) {
     const task = tasks.find(t => t.id === event.active.id)
     setActiveTask(task || null)
@@ -218,12 +314,11 @@ export default function KanbanPage() {
     const { active, over } = event
     setActiveTask(null)
     if (!over) return
-    const taskId   = active.id as string
+    const taskId = active.id as string
     const newStatus = over.id as TaskStatus
     const task = tasks.find(t => t.id === taskId)
     if (!task || task.status === newStatus) return
 
-    // Optimistic UI update
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
     await fetch('/api/tasks', {
       method: 'PATCH',
@@ -232,7 +327,6 @@ export default function KanbanPage() {
     })
   }
 
-  // ── Task CRUD ──────────────────────────────────────────
   function openNew(status: TaskStatus = 'todo') {
     setEditing(null)
     setForm({ ...EMPTY_FORM, status })
@@ -281,6 +375,16 @@ export default function KanbanPage() {
     await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
   }
 
+  async function archiveTask(id: string) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'archived' as TaskStatus } : t))
+    await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: 'archived' }) })
+  }
+
+  async function restoreTask(id: string) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'backlog' as TaskStatus } : t))
+    await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: 'backlog' }) })
+  }
+
   async function deleteTask(id: string) {
     if (!confirm('刪除此任務？')) return
     setTasks(prev => prev.filter(t => t.id !== id))
@@ -296,6 +400,10 @@ export default function KanbanPage() {
         : [...f.assignees, name],
     }))
   }
+
+  // Separate archived tasks from active tasks
+  const activeTasks = tasks.filter(t => t.status !== 'archived')
+  const archivedTasks = tasks.filter(t => t.status === 'archived')
 
   return (
     <div className="p-4 md:p-6">
@@ -313,43 +421,56 @@ export default function KanbanPage() {
       {loading ? (
         <div className="text-center py-20 text-gray-400">載入中...</div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory" style={{ minWidth: 0 }}>
-            {COLUMNS.map(col => (
-              <KanbanColumn
-                key={col.id}
-                col={col}
-                tasks={tasks.filter(t => t.status === col.id)}
-                agents={agents}
-                onEdit={openEdit}
-                onMove={moveTask}
-                onDelete={deleteTask}
-                onAddNew={openNew}
-              />
-            ))}
-          </div>
+        <>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory" style={{ minWidth: 0 }}>
+              {COLUMNS.map(col => (
+                <KanbanColumn
+                  key={col.id}
+                  col={col}
+                  tasks={activeTasks.filter(t => t.status === col.id)}
+                  agents={agents}
+                  onEdit={openEdit}
+                  onMove={moveTask}
+                  onDelete={deleteTask}
+                  onArchive={archiveTask}
+                  onAddNew={openNew}
+                />
+              ))}
+            </div>
 
-          {/* Drag overlay: rendered above everything while dragging */}
-          <DragOverlay>
-            {activeTask ? (
-              <TaskCard
-                task={activeTask}
-                agents={agents}
-                onEdit={() => {}}
-                onMove={() => {}}
-                onDelete={() => {}}
-                isDragOverlay
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            <DragOverlay>
+              {activeTask ? (
+                <TaskCard
+                  task={activeTask}
+                  agents={agents}
+                  onEdit={() => {}}
+                  onMove={() => {}}
+                  onDelete={() => {}}
+                  isDragOverlay
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+
+          {/* Archive Section */}
+          <ArchiveSection
+            tasks={archivedTasks}
+            agents={agents}
+            onEdit={openEdit}
+            onRestore={restoreTask}
+            onDelete={deleteTask}
+            expanded={archiveExpanded}
+            onToggle={() => setArchiveExpanded(e => !e)}
+          />
+        </>
       )}
 
-      {/* ── Task Modal ── */}
+      {/* Task Modal */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -394,7 +515,10 @@ export default function KanbanPage() {
                 <Label>欄位</Label>
                 <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: (v || 'todo') as TaskStatus }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.emoji} {c.label}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.emoji} {c.label}</SelectItem>)}
+                    <SelectItem value="archived">📦 Archive</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
               <div>

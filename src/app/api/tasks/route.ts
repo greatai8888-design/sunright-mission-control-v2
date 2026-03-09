@@ -18,6 +18,7 @@ export async function GET() {
 }
 
 // Known task columns — strip unknown fields gracefully (e.g. when schema migration is pending)
+// Valid status values include 'archived'
 const TASK_BASE_COLS = ['title', 'description', 'status', 'priority', 'assignee', 'tag',
                         'position', 'project_id', 'created_at', 'updated_at']
 const TASK_EXTRA_COLS = ['assignees', 'deadline']

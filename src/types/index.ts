@@ -1,4 +1,4 @@
-export type TaskStatus = 'backlog' | 'todo' | 'pending' | 'inprogress' | 'review' | 'done'
+export type TaskStatus = 'backlog' | 'todo' | 'pending' | 'inprogress' | 'review' | 'done' | 'archived'
 export type Priority = 'low' | 'medium' | 'high'
 export type AgentStatus = 'active' | 'inactive' | 'idle' | 'working' | 'offline'
 
