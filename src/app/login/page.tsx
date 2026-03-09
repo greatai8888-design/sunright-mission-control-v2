@@ -23,8 +23,8 @@ export default function LoginPage() {
       setError('Email 或密碼不正確')
       setLoading(false)
     } else {
-      router.push('/')
-      router.refresh()
+      // Full page reload ensures middleware picks up the new auth cookie
+      window.location.href = '/'
     }
   }
 
