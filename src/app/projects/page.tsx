@@ -28,19 +28,16 @@ export default function ProjectsPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
-    setProjects(data || [])
+    const res = await fetch('/api/projects').then(r => r.json())
+    setProjects(Array.isArray(res) ? res : [])
     setLoading(false)
   }
 
   async function add() {
     if (!form.name.trim()) return
-    await supabase.from('projects').insert({
-      name: form.name.trim(),
-      description: form.description.trim() || null,
-      emoji: form.emoji || '🚀',
-      owner: form.owner.trim() || null,
-      status: form.status,
+    await fetch('/api/projects', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: form.name.trim(), description: form.description.trim() || null, emoji: form.emoji || '🚀', owner: form.owner.trim() || null, status: form.status }),
     })
     setOpen(false)
     setForm({ name: '', description: '', emoji: '🚀', owner: '', status: 'active' })
@@ -48,7 +45,7 @@ export default function ProjectsPage() {
   }
 
   async function updateStatus(id: string, status: string) {
-    await supabase.from('projects').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    await fetch('/api/projects', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
     load()
   }
 

@@ -48,12 +48,12 @@ export default function KanbanPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: t }, { data: a }] = await Promise.all([
-      supabase.from('tasks').select('*').order('position').order('created_at', { ascending: false }),
-      supabase.from('agents').select('*').order('created_at'),
+    const [tasksRes, agentsRes] = await Promise.all([
+      fetch('/api/tasks').then(r => r.json()),
+      supabase.from('agents').select('*').order('created_at').then(r => r.data),
     ])
-    setTasks(t || [])
-    setAgents(a || [])
+    setTasks(Array.isArray(tasksRes) ? tasksRes : [])
+    setAgents(agentsRes || [])
     setLoading(false)
   }, [])
 
@@ -92,25 +92,24 @@ export default function KanbanPage() {
       assignees: form.assignees.length ? form.assignees : null,
       status: form.status,
       deadline: form.deadline || null,
-      updated_at: new Date().toISOString(),
     }
     if (editing) {
-      await supabase.from('tasks').update(payload).eq('id', editing.id)
+      await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editing.id, ...payload }) })
     } else {
-      await supabase.from('tasks').insert(payload)
+      await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     }
     setOpen(false)
     load()
   }
 
   async function moveTask(id: string, status: TaskStatus) {
-    await supabase.from('tasks').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) })
     load()
   }
 
   async function deleteTask(id: string) {
     if (!confirm('刪除此任務？')) return
-    await supabase.from('tasks').delete().eq('id', id)
+    await fetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     load()
   }
 
