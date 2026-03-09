@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 
 const navItems = [
   { href: '/',           label: 'Dashboard',    icon: '📊' },
@@ -18,6 +19,14 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <aside className="w-60 bg-white border-r border-gray-100 flex flex-col h-screen fixed left-0 top-0 z-40">
@@ -55,12 +64,18 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {/* API Status */}
-      <div className="px-5 py-4 border-t border-gray-100">
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+        <div className="flex items-center gap-2 text-xs text-gray-400 px-1">
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
           Supabase 已連線
         </div>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition"
+        >
+          <span>🚪</span> 登出
+        </button>
       </div>
     </aside>
   )
