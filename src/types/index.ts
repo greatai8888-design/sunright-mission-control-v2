@@ -1,6 +1,6 @@
-export type TaskStatus = 'todo' | 'inprogress' | 'review' | 'done'
+export type TaskStatus = 'backlog' | 'todo' | 'pending' | 'inprogress' | 'review' | 'done'
 export type Priority = 'low' | 'medium' | 'high'
-export type AgentStatus = 'active' | 'inactive'
+export type AgentStatus = 'active' | 'inactive' | 'idle' | 'working' | 'offline'
 
 export interface Agent {
   id: string
@@ -18,9 +18,11 @@ export interface Task {
   status: TaskStatus
   priority: Priority
   assignee?: string
+  assignees?: string[]
   tag?: string
   position: number
   project_id?: string
+  deadline?: string
   created_at: string
   updated_at: string
 }
@@ -121,6 +123,6 @@ export interface MonitoringStatus {
 }
 
 export interface DashboardStats {
-  tasks: { todo: number; inprogress: number; review: number; done: number; total: number }
+  tasks: { todo: number; inprogress: number; review: number; done: number; total: number; backlog: number; pending: number }
   agents: { total: number; active: number }
 }

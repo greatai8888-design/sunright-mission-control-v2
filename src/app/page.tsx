@@ -2,50 +2,71 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Agent, DashboardStats } from '@/types'
 
+const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+  active:  { label: '運作中', color: 'text-green-600 border-green-200 bg-green-50',   dot: 'bg-green-500' },
+  idle:    { label: '待命',   color: 'text-gray-500 border-gray-200 bg-gray-50',      dot: 'bg-gray-400' },
+  working: { label: '執行中', color: 'text-blue-600 border-blue-200 bg-blue-50',      dot: 'bg-blue-500 animate-pulse' },
+  offline: { label: '離線',   color: 'text-red-400 border-red-200 bg-red-50',         dot: 'bg-red-400' },
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
-    tasks: { todo: 0, inprogress: 0, review: 0, done: 0, total: 0 },
+    tasks: { backlog: 0, todo: 0, pending: 0, inprogress: 0, review: 0, done: 0, total: 0 },
     agents: { total: 0, active: 0 },
   })
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
-      const [{ data: tasks }, { data: agentsData }] = await Promise.all([
-        supabase.from('tasks').select('status'),
-        supabase.from('agents').select('*'),
-      ])
-      const t = tasks || []
-      setStats({
-        tasks: {
-          todo:        t.filter(x => x.status === 'todo').length,
-          inprogress:  t.filter(x => x.status === 'inprogress').length,
-          review:      t.filter(x => x.status === 'review').length,
-          done:        t.filter(x => x.status === 'done').length,
-          total:       t.length,
-        },
-        agents: {
-          total:  (agentsData || []).length,
-          active: (agentsData || []).filter(a => a.status === 'active').length,
-        }
-      })
-      setAgents(agentsData || [])
-      setLoading(false)
-    }
-    load()
+  const load = useCallback(async () => {
+    const [{ data: tasks }, { data: agentsData }] = await Promise.all([
+      supabase.from('tasks').select('status'),
+      supabase.from('agents').select('*').order('created_at'),
+    ])
+    const t = tasks || []
+    setStats({
+      tasks: {
+        backlog:    t.filter(x => x.status === 'backlog').length,
+        todo:       t.filter(x => x.status === 'todo').length,
+        pending:    t.filter(x => x.status === 'pending').length,
+        inprogress: t.filter(x => x.status === 'inprogress').length,
+        review:     t.filter(x => x.status === 'review').length,
+        done:       t.filter(x => x.status === 'done').length,
+        total:      t.length,
+      },
+      agents: {
+        total:  (agentsData || []).length,
+        active: (agentsData || []).filter(a => a.status !== 'offline').length,
+      }
+    })
+    setAgents(agentsData || [])
+    setLoading(false)
   }, [])
 
+  useEffect(() => {
+    load()
+
+    // Realtime subscription for agent status changes
+    if (typeof window === 'undefined') return
+    const channel = supabase
+      .channel('agents-status')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'agents' }, () => {
+        load()
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [load])
+
   const statCards = [
-    { label: '任務總數',  value: stats.tasks.total,       icon: '🗂', color: 'text-indigo-600' },
-    { label: '進行中',    value: stats.tasks.inprogress,  icon: '⚡', color: 'text-yellow-600' },
-    { label: '已完成',    value: stats.tasks.done,        icon: '✅', color: 'text-green-600' },
+    { label: '任務總數',  value: stats.tasks.total,      icon: '🗂', color: 'text-indigo-600' },
+    { label: '進行中',    value: stats.tasks.inprogress, icon: '⚡', color: 'text-yellow-600' },
+    { label: '已完成',    value: stats.tasks.done,       icon: '✅', color: 'text-green-600' },
     { label: 'AI 員工',   value: `${stats.agents.active}/${stats.agents.total}`, icon: '🤖', color: 'text-purple-600' },
   ]
 
@@ -57,7 +78,7 @@ export default function DashboardPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">📊 Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Sunright AI 員工管理控制中心</p>
+        <p className="text-sm text-gray-500 mt-1">Sunright AI 員工管理控制中心 · Realtime</p>
       </div>
 
       {/* Stat Cards */}
@@ -75,7 +96,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Progress Bar */}
+      {/* Progress + breakdown */}
       <Card>
         <CardContent className="pt-5">
           <div className="flex justify-between items-center mb-2">
@@ -83,40 +104,50 @@ export default function DashboardPage() {
             <span className="text-sm font-bold text-gray-900">{donePct}%</span>
           </div>
           <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700"
-              style={{ width: `${donePct}%` }}
-            />
+            <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700"
+              style={{ width: `${donePct}%` }} />
           </div>
-          <div className="flex gap-4 mt-2 text-xs text-gray-400">
-            <span>待辦 {stats.tasks.todo}</span>
-            <span>進行中 {stats.tasks.inprogress}</span>
-            <span>Review {stats.tasks.review}</span>
-            <span>完成 {stats.tasks.done}</span>
+          <div className="flex gap-4 mt-2 text-xs text-gray-400 flex-wrap">
+            <span>📋 Backlog {stats.tasks.backlog}</span>
+            <span>📌 To Do {stats.tasks.todo}</span>
+            <span>⏳ Pending {stats.tasks.pending}</span>
+            <span>⚡ 進行中 {stats.tasks.inprogress}</span>
+            <span>🔍 Review {stats.tasks.review}</span>
+            <span>✅ 完成 {stats.tasks.done}</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Agents */}
+      {/* 12 Agents Grid */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">🤖 AI 員工</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">🤖 AI 員工</h2>
+          <Badge variant="secondary" className="text-xs">Realtime</Badge>
+          <span className="text-xs text-gray-400 ml-auto">{stats.agents.active} / {stats.agents.total} 上線</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {loading
-            ? [1,2,3].map(i => <Card key={i}><CardContent className="pt-5 h-20 bg-gray-50 animate-pulse rounded-xl" /></Card>)
-            : agents.map((a) => (
-              <Card key={a.id}>
-                <CardContent className="pt-5 flex items-center gap-4">
-                  <span className="text-3xl">{a.emoji}</span>
-                  <div>
-                    <div className="font-semibold text-gray-900">{a.name}</div>
-                    <div className="text-sm text-gray-500">{a.role}</div>
-                    <Badge variant="outline" className="mt-1.5 text-green-600 border-green-200 bg-green-50 text-xs">
-                      ● 運作中
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            ? Array.from({ length: 12 }).map((_, i) => (
+                <Card key={i}><CardContent className="pt-4 pb-4 h-16 bg-gray-50 animate-pulse rounded-xl" /></Card>
+              ))
+            : agents.map((a) => {
+                const cfg = STATUS_CONFIG[a.status] || STATUS_CONFIG.idle
+                return (
+                  <Card key={a.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                      <span className="text-2xl flex-shrink-0">{a.emoji}</span>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">{a.name}</div>
+                        <div className="text-xs text-gray-400 truncate">{a.role}</div>
+                        <div className={`inline-flex items-center gap-1 mt-1 text-xs px-1.5 py-0.5 rounded-full border ${cfg.color}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                          {cfg.label}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
         </div>
       </div>
     </div>
