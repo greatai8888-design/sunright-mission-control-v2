@@ -39,21 +39,24 @@ const JOBS: JobDef[] = [
   // ── 2 AM ──────────────────────────────────────────────
   { id: 'sys-review',  name: '系統回顧',       emoji: '🌙', color: 'system',    hour: 2,  minute: 0,  days: 'all',      enabled: true },
   { id: 'mc-test',     name: 'MC 用戶測試',    emoji: '🧪', color: 'system',    hour: 2,  minute: 0,  days: 'all',      enabled: true },
+  // ── 5:30 AM daily ─────────────────────────────────────
+  { id: 'gmaps-scan',  name: 'Google Maps 掃描', emoji: '🗺️', color: 'monitor', hour: 5,  minute: 30, days: 'all',      enabled: true },
+  // ── 6 AM daily ────────────────────────────────────────
+  { id: 'yelp-scan',   name: 'Yelp 掃描',      emoji: '⭐', color: 'monitor',   hour: 6,  minute: 0,  days: 'all',      enabled: true },
   // ── 6:30 AM Mon–Fri ───────────────────────────────────
   { id: 'kai-pre',     name: 'Kai 開盤情報',   emoji: '📉', color: 'trading',   hour: 6,  minute: 30, days: [1,2,3,4,5], enabled: true },
+  // ── 6:45 AM daily ─────────────────────────────────────
+  { id: 'rex-health',  name: 'Rex 健康檢查',   emoji: '🔍', color: 'system',    hour: 6,  minute: 45, days: 'all',      enabled: true },
   // ── 7 AM daily ────────────────────────────────────────
-  { id: 'gmaps-scan',  name: 'Google Maps 掃描', emoji: '🗺️', color: 'monitor', hour: 7,  minute: 0,  days: 'all',      enabled: true },
-  // ── 7:30 AM daily ─────────────────────────────────────
-  { id: 'yelp-scan',   name: 'Yelp 掃描',      emoji: '⭐', color: 'monitor',   hour: 7,  minute: 30, days: 'all',      enabled: true },
-  // ── 8 AM daily ────────────────────────────────────────
-  { id: 'rex-health',  name: 'Rex 健康檢查',   emoji: '🔍', color: 'system',    hour: 8,  minute: 0,  days: 'all',      enabled: true },
-  { id: 'morning-rpt', name: '每日晨報',        emoji: '☀️', color: 'report',    hour: 8,  minute: 0,  days: 'all',      enabled: true },
+  { id: 'morning-rpt', name: '每日晨報',        emoji: '☀️', color: 'report',    hour: 7,  minute: 0,  days: 'all',      enabled: true },
   { id: 'notion-sync', name: 'Notion 同步',    emoji: '📋', color: 'system',    hour: 8,  minute: 0,  days: 'all',      enabled: true },
   // ── 8:30 AM daily ─────────────────────────────────────
   { id: 'surprise',    name: 'Soma 驚喜禮包',  emoji: '🎁', color: 'marketing', hour: 8,  minute: 30, days: 'all',      enabled: true },
   // ── 9 AM daily ────────────────────────────────────────
   { id: 'cleo-mon',    name: 'Cleo 評論監控',  emoji: '🛎', color: 'monitor',   hour: 9,  minute: 0,  days: 'all',      enabled: true },
   { id: 'mc-sync',     name: 'MC 資料同步',    emoji: '📤', color: 'system',    hour: 9,  minute: 0,  days: 'all',      enabled: true },
+  // ── 9:30 AM daily ─────────────────────────────────────
+  { id: 'agent-standup', name: 'Agent 巡查報告', emoji: '🧭', color: 'report',  hour: 9,  minute: 30, days: 'all',      enabled: true },
   // ── 9 AM Mon ──────────────────────────────────────────
   { id: 'yelp-weekly', name: 'Yelp 週報',      emoji: '📊', color: 'report',    hour: 9,  minute: 0,  days: [1],        enabled: true },
   { id: 'sample-rpt',  name: 'Sample Check 週報', emoji: '📋', color: 'report', hour: 9,  minute: 0, days: [1],        enabled: true },
