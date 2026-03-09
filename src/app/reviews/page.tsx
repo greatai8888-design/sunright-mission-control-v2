@@ -41,14 +41,21 @@ export default function ReviewsPage() {
   const negYelp  = yelp.filter(r => r.is_negative)
 
   function ReviewCard({ r }: { r: Review }) {
+    const dateStr = r.review_date || new Date(r.scraped_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     return (
       <div className={`bg-white border rounded-xl p-4 shadow-sm ${r.is_negative ? 'border-red-100' : 'border-gray-100'}`}>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className="font-semibold text-sm text-gray-900">{r.author || 'Anonymous'}</span>
           <Stars rating={r.rating} />
-          {r.location && <span className="text-xs text-gray-400">📍 {r.location}</span>}
-          {r.is_negative && <Badge variant="destructive" className="text-xs">負評</Badge>}
-          <span className="text-xs text-gray-300 ml-auto">{r.review_date || new Date(r.scraped_at).toLocaleDateString('zh-TW')}</span>
+          <span className="text-xs text-gray-400">·</span>
+          <span className="text-xs text-gray-500">{dateStr}</span>
+          {r.location && (
+            <>
+              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-400">📍 {r.location}</span>
+            </>
+          )}
+          {r.is_negative && <Badge variant="destructive" className="text-xs">Negative</Badge>}
         </div>
         <p className="text-sm text-gray-600 leading-relaxed">{r.content?.slice(0, 300)}</p>
       </div>
@@ -60,23 +67,23 @@ export default function ReviewsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">⭐ Reviews</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Google Maps + Yelp 評論監控</p>
+          <p className="text-sm text-gray-500 mt-0.5">Google Maps + Yelp Review Monitoring</p>
         </div>
-        <Button variant="outline" onClick={load}>↻ 重新整理</Button>
+        <Button variant="outline" onClick={load}>↻ Refresh</Button>
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-gray-400">載入中...</div>
+        <div className="text-center py-20 text-gray-400">Loading...</div>
       ) : (
         <Tabs defaultValue="gmaps">
           <TabsList className="mb-4">
             <TabsTrigger value="gmaps">
               🗺️ Google Maps
-              {negGmaps.length > 0 && <Badge variant="destructive" className="ml-2 text-xs">{negGmaps.length} 負評</Badge>}
+              {negGmaps.length > 0 && <Badge variant="destructive" className="ml-2 text-xs">{negGmaps.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="yelp">
               ⭐ Yelp
-              {negYelp.length > 0 && <Badge variant="destructive" className="ml-2 text-xs">{negYelp.length} 負評</Badge>}
+              {negYelp.length > 0 && <Badge variant="destructive" className="ml-2 text-xs">{negYelp.length}</Badge>}
             </TabsTrigger>
           </TabsList>
 
@@ -84,16 +91,16 @@ export default function ReviewsPage() {
             {gmaps.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
                 <div className="text-4xl mb-3">🗺️</div>
-                <div className="font-medium">尚無 Google Maps 評論</div>
-                <p className="text-sm mt-1">監控腳本執行後自動 push 至此</p>
+                <div className="font-medium">No Google Maps reviews yet</div>
+                <p className="text-sm mt-1">Reviews will appear here after monitoring runs</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {negGmaps.length > 0 && (
                   <>
-                    <p className="text-sm font-medium text-red-600">🚨 負評（{negGmaps.length} 筆）</p>
+                    <p className="text-sm font-medium text-red-600">🚨 Negative Reviews ({negGmaps.length})</p>
                     {negGmaps.map(r => <ReviewCard key={r.id} r={r} />)}
-                    <p className="text-sm font-medium text-gray-500 pt-2">其他評論</p>
+                    <p className="text-sm font-medium text-gray-500 pt-2">Other Reviews</p>
                   </>
                 )}
                 {gmaps.filter(r => !r.is_negative).map(r => <ReviewCard key={r.id} r={r} />)}
@@ -105,16 +112,16 @@ export default function ReviewsPage() {
             {yelp.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
                 <div className="text-4xl mb-3">⭐</div>
-                <div className="font-medium">尚無 Yelp 評論</div>
-                <p className="text-sm mt-1">監控腳本執行後自動 push 至此</p>
+                <div className="font-medium">No Yelp reviews yet</div>
+                <p className="text-sm mt-1">Reviews will appear here after monitoring runs</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {negYelp.length > 0 && (
                   <>
-                    <p className="text-sm font-medium text-red-600">🚨 負評（{negYelp.length} 筆）</p>
+                    <p className="text-sm font-medium text-red-600">🚨 Negative Reviews ({negYelp.length})</p>
                     {negYelp.map(r => <ReviewCard key={r.id} r={r} />)}
-                    <p className="text-sm font-medium text-gray-500 pt-2">其他評論</p>
+                    <p className="text-sm font-medium text-gray-500 pt-2">Other Reviews</p>
                   </>
                 )}
                 {yelp.filter(r => !r.is_negative).map(r => <ReviewCard key={r.id} r={r} />)}

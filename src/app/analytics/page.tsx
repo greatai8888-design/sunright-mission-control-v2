@@ -5,9 +5,10 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
+  ResponsiveContainer,
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import Image from 'next/image'
 
 // ─── Types ────────────────────────────────────────────────
 interface Competitor {
@@ -22,6 +23,7 @@ interface Competitor {
   posts_per_week: number
   engagement_rate: number
   last_post_date: string
+  profile_pic_url?: string
 }
 
 // ─── Sunright own data (mock until IG API) ────────────────
@@ -33,12 +35,54 @@ const SUNRIGHT = {
   avg_comments: 45,
   posts_per_week: 3.5,
   engagement_rate: 3.7,
+  profile_pic_url: null as string | null,
+}
+
+// ─── Avatar Component ─────────────────────────────────────
+function Avatar({ name, url, size = 36 }: { name: string; url?: string | null; size?: number }) {
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const colors = [
+    'from-pink-400 to-rose-500',
+    'from-amber-400 to-orange-500',
+    'from-emerald-400 to-teal-500',
+    'from-blue-400 to-indigo-500',
+    'from-purple-400 to-violet-500',
+    'from-cyan-400 to-sky-500',
+  ]
+  const colorIdx = name.charCodeAt(0) % colors.length
+
+  if (url) {
+    return (
+      <div
+        className="rounded-full overflow-hidden bg-gray-100 flex-shrink-0"
+        style={{ width: size, height: size }}
+      >
+        <Image
+          src={url}
+          alt={name}
+          width={size}
+          height={size}
+          className="object-cover w-full h-full"
+          unoptimized
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`rounded-full bg-gradient-to-br ${colors[colorIdx]} flex items-center justify-center text-white font-semibold flex-shrink-0`}
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+    >
+      {initials}
+    </div>
+  )
 }
 
 // ─── Mock 30-day trend data ───────────────────────────────
 function genTrend(base: number, variance = 0.02): number[] {
   let v = base
-  return Array.from({ length: 30 }, (_, i) => {
+  return Array.from({ length: 30 }, () => {
     v = v * (1 + (Math.random() - 0.48) * variance)
     return Math.round(v)
   })
@@ -49,14 +93,14 @@ const CHART_COLORS = [
   '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
 ]
 
-// ─── Mock top posts ───────────────────────────────────────
+// ─── Mock top posts (with profile pic URLs) ───────────────
 const TOP_POSTS = [
-  { handle: 'tigersugarusa',  brand: 'Tiger Sugar',   img: '🧋', caption: 'New brown sugar series drop 🔥 Limited stock!', eng: '6.2%', likes: '4.1K' },
-  { handle: 'gongchausa',     brand: 'Gong Cha USA',  img: '🍵', caption: 'Spring menu is HERE 🌸 Sakura milk tea available now', eng: '4.8%', likes: '6.8K' },
-  { handle: 'presotea_usa',   brand: 'Presotea',      img: '🫖', caption: 'Authentic Preso tea press 🇹🇼 freshly brewed', eng: '4.5%', likes: '2.1K' },
-  { handle: 'meetfresh_usa',  brand: 'Meet Fresh',    img: '🍡', caption: 'Taro ball dessert series — every spoonful is a vibe', eng: '4.1%', likes: '2.5K' },
-  { handle: 'yifangusa',      brand: 'Yi Fang',       img: '🍑', caption: 'Fresh passion fruit lemonade just arrived 🍋', eng: '5.2%', likes: '1.8K' },
-  { handle: 'coco_usa',       brand: 'Coco Fresh',    img: '🥤', caption: 'Everyday boba at everyday prices 💛', eng: '3.1%', likes: '5.5K' },
+  { handle: 'tigersugarusa',  brand: 'Tiger Sugar',   profile_pic_url: null, caption: 'New brown sugar series drop 🔥 Limited stock!', eng: '6.2%', likes: '4.1K' },
+  { handle: 'gongchausa',     brand: 'Gong Cha USA',  profile_pic_url: null, caption: 'Spring menu is HERE 🌸 Sakura milk tea available now', eng: '4.8%', likes: '6.8K' },
+  { handle: 'presotea_usa',   brand: 'Presotea',      profile_pic_url: null, caption: 'Authentic Preso tea press 🇹🇼 freshly brewed', eng: '4.5%', likes: '2.1K' },
+  { handle: 'meetfresh_usa',  brand: 'Meet Fresh',    profile_pic_url: null, caption: 'Taro ball dessert series — every spoonful is a vibe', eng: '4.1%', likes: '2.5K' },
+  { handle: 'yifangusa',      brand: 'Yi Fang',       profile_pic_url: null, caption: 'Fresh passion fruit lemonade just arrived 🍋', eng: '5.2%', likes: '1.8K' },
+  { handle: 'coco_usa',       brand: 'Coco Fresh',    profile_pic_url: null, caption: 'Everyday boba at everyday prices 💛', eng: '3.1%', likes: '5.5K' },
 ]
 
 // ─── Helper ────────────────────────────────────────────────
@@ -84,7 +128,7 @@ export default function AnalyticsPage() {
     const comps = (data || []) as Competitor[]
     setCompetitors(comps)
     setSelected(comps.slice(0, 4).map(c => c.handle))
-    setLastUpdate(new Date().toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
+    setLastUpdate(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
     setLoading(false)
   }, [])
 
@@ -139,10 +183,10 @@ export default function AnalyticsPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">📊 Analytics</h1>
-          <p className="text-sm text-gray-500 mt-0.5">IG 競品分析 · {competitors.length} 競品 · 更新 {lastUpdate || '...'}</p>
+          <p className="text-sm text-gray-500 mt-0.5">IG Competitive Analysis · {competitors.length} Competitors · Updated {lastUpdate || '...'}</p>
         </div>
         <button onClick={load} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500">
-          ↻ 重整
+          ↻ Refresh
         </button>
       </div>
 
@@ -154,11 +198,11 @@ export default function AnalyticsPage() {
         <>
           {/* ① Comparison Cards */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sunright vs 競品平均</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sunright vs Competitor Average</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Followers */}
               <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-                <p className="text-xs text-gray-400 mb-1">粉絲數</p>
+                <p className="text-xs text-gray-400 mb-1">Followers</p>
                 <div className="flex items-end gap-3">
                   <div>
                     <div className="text-2xl font-bold text-blue-600">{SUNRIGHT.followers.toLocaleString()}</div>
@@ -167,7 +211,7 @@ export default function AnalyticsPage() {
                   <div className="text-gray-300 text-lg mb-4">vs</div>
                   <div>
                     <div className="text-2xl font-bold text-gray-400">{avgFollowers.toLocaleString()}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Avg</div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs">
@@ -177,7 +221,7 @@ export default function AnalyticsPage() {
 
               {/* Engagement */}
               <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-                <p className="text-xs text-gray-400 mb-1">互動率</p>
+                <p className="text-xs text-gray-400 mb-1">Engagement Rate</p>
                 <div className="flex items-end gap-3">
                   <div>
                     <div className="text-2xl font-bold text-green-600">{SUNRIGHT.engagement_rate}%</div>
@@ -186,7 +230,7 @@ export default function AnalyticsPage() {
                   <div className="text-gray-300 text-lg mb-4">vs</div>
                   <div>
                     <div className="text-2xl font-bold text-gray-400">{avgEngagement}%</div>
-                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Avg</div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs">
@@ -196,7 +240,7 @@ export default function AnalyticsPage() {
 
               {/* Posts/week */}
               <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-                <p className="text-xs text-gray-400 mb-1">週發文數</p>
+                <p className="text-xs text-gray-400 mb-1">Posts / Week</p>
                 <div className="flex items-end gap-3">
                   <div>
                     <div className="text-2xl font-bold text-purple-600">{SUNRIGHT.posts_per_week}</div>
@@ -205,7 +249,7 @@ export default function AnalyticsPage() {
                   <div className="text-gray-300 text-lg mb-4">vs</div>
                   <div>
                     <div className="text-2xl font-bold text-gray-400">{avgPosts}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Avg</div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs">
@@ -217,18 +261,18 @@ export default function AnalyticsPage() {
 
           {/* ② Ranking Table */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">競品排名</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Competitor Ranking</h2>
             <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-10">#</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">品牌</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">粉絲</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">互動率</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">週發文</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">趨勢</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Brand</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Followers</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">Eng Rate</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">Posts/Wk</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">Trend</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -236,8 +280,13 @@ export default function AnalyticsPage() {
                     <tr className="border-b border-blue-100 bg-blue-50/60">
                       <td className="px-4 py-3 text-xs text-blue-400 font-bold">★</td>
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-blue-700 text-sm">Sunright Tea Studio</div>
-                        <div className="text-xs text-blue-400">@{SUNRIGHT.handle}</div>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={SUNRIGHT.name} url={SUNRIGHT.profile_pic_url} size={32} />
+                          <div>
+                            <div className="font-semibold text-blue-700 text-sm">Sunright Tea Studio</div>
+                            <div className="text-xs text-blue-400">@{SUNRIGHT.handle}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{SUNRIGHT.followers.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-semibold text-green-600">{SUNRIGHT.engagement_rate}%</td>
@@ -251,8 +300,13 @@ export default function AnalyticsPage() {
                         <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
                           <td className="px-4 py-3 text-xs text-gray-400">{i + 1}</td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-gray-900">{c.name}</div>
-                            <div className="text-xs text-gray-400">@{c.handle}</div>
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={c.name} url={c.profile_pic_url} size={32} />
+                              <div>
+                                <div className="font-medium text-gray-900">{c.name}</div>
+                                <div className="text-xs text-gray-400">@{c.handle}</div>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right text-gray-700">{c.followers.toLocaleString()}</td>
                           <td className={`px-4 py-3 text-right font-medium ${engColor}`}>{c.engagement_rate}%</td>
@@ -273,7 +327,7 @@ export default function AnalyticsPage() {
 
           {/* ③ Follower Trend Chart */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">粉絲趨勢 — 近 30 天</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Follower Trend — Last 30 Days</h2>
             <div className="bg-white border border-gray-100 rounded-2xl p-4 md:p-5 shadow-sm">
               {/* Brand selector */}
               <div className="flex flex-wrap gap-2 mb-5">
@@ -293,12 +347,11 @@ export default function AnalyticsPage() {
                       style={isOn ? { backgroundColor: color, borderColor: color } : {}}
                     >
                       {isSun ? '★ ' : ''}{c.name.split(' ')[0]}
-                      {'handle' in c ? '' : ''}
                     </button>
                   )
                 })}
               </div>
-              <p className="text-xs text-gray-400 mb-3">最多選 6 個競品對比（Sunright 預設固定）</p>
+              <p className="text-xs text-gray-400 mb-3">Select up to 6 competitors (Sunright always shown)</p>
 
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={trendData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -351,16 +404,14 @@ export default function AnalyticsPage() {
 
           {/* ④ Top Posts */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">競品最新亮眼貼文</h2>
-            <p className="text-xs text-gray-400 -mt-2 mb-3">各競品近期互動率最高貼文 · Mock 示意（Iris 接 IG API 後更新）</p>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Top Competitor Posts</h2>
+            <p className="text-xs text-gray-400 -mt-2 mb-3">Recent high-engagement posts · Mock data (Iris will connect IG API)</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {TOP_POSTS.map(post => (
                 <div key={post.handle} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition">
                   {/* Header */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-yellow-400 flex items-center justify-center text-lg">
-                      {post.img}
-                    </div>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <Avatar name={post.brand} url={post.profile_pic_url} size={36} />
                     <div>
                       <div className="font-semibold text-gray-900 text-sm">{post.brand}</div>
                       <div className="text-xs text-gray-400">@{post.handle}</div>
@@ -368,8 +419,10 @@ export default function AnalyticsPage() {
                   </div>
 
                   {/* Post thumbnail mock */}
-                  <div className="h-28 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl flex items-center justify-center text-4xl mb-3">
-                    {post.img}
+                  <div className="h-28 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl flex items-center justify-center text-gray-300 mb-3">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                   </div>
 
                   {/* Caption */}
@@ -377,7 +430,7 @@ export default function AnalyticsPage() {
 
                   {/* Metrics */}
                   <div className="flex gap-3 text-xs">
-                    <span className="text-green-600 font-semibold">{post.eng} 互動率</span>
+                    <span className="text-green-600 font-semibold">{post.eng} Eng</span>
                     <span className="text-gray-400">❤️ {post.likes}</span>
                   </div>
                 </div>
