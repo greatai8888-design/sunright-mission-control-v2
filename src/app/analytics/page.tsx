@@ -2,15 +2,16 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer,
+} from 'recharts'
 import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 
-interface CompetitorLatest {
+// ─── Types ────────────────────────────────────────────────
+interface Competitor {
   id: string
-  competitor_id: string
   handle: string
   name: string
   notes: string
@@ -21,120 +22,369 @@ interface CompetitorLatest {
   posts_per_week: number
   engagement_rate: number
   last_post_date: string
-  scraped_at: string
 }
 
-function engColor(rate: number) {
-  if (rate >= 3.5) return 'text-green-600'
-  if (rate >= 2.5) return 'text-yellow-600'
-  return 'text-red-500'
+// ─── Sunright own data (mock until IG API) ────────────────
+const SUNRIGHT = {
+  handle: 'sunright_tea',
+  name: 'Sunright Tea Studio',
+  followers: 24800,
+  avg_likes: 780,
+  avg_comments: 45,
+  posts_per_week: 3.5,
+  engagement_rate: 3.7,
 }
 
-function fmtNum(n: number) {
-  return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n ?? '—')
+// ─── Mock 30-day trend data ───────────────────────────────
+function genTrend(base: number, variance = 0.02): number[] {
+  let v = base
+  return Array.from({ length: 30 }, (_, i) => {
+    v = v * (1 + (Math.random() - 0.48) * variance)
+    return Math.round(v)
+  })
 }
 
+const CHART_COLORS = [
+  '#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6',
+  '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
+]
+
+// ─── Mock top posts ───────────────────────────────────────
+const TOP_POSTS = [
+  { handle: 'tigersugarusa',  brand: 'Tiger Sugar',   img: '🧋', caption: 'New brown sugar series drop 🔥 Limited stock!', eng: '6.2%', likes: '4.1K' },
+  { handle: 'gongchausa',     brand: 'Gong Cha USA',  img: '🍵', caption: 'Spring menu is HERE 🌸 Sakura milk tea available now', eng: '4.8%', likes: '6.8K' },
+  { handle: 'presotea_usa',   brand: 'Presotea',      img: '🫖', caption: 'Authentic Preso tea press 🇹🇼 freshly brewed', eng: '4.5%', likes: '2.1K' },
+  { handle: 'meetfresh_usa',  brand: 'Meet Fresh',    img: '🍡', caption: 'Taro ball dessert series — every spoonful is a vibe', eng: '4.1%', likes: '2.5K' },
+  { handle: 'yifangusa',      brand: 'Yi Fang',       img: '🍑', caption: 'Fresh passion fruit lemonade just arrived 🍋', eng: '5.2%', likes: '1.8K' },
+  { handle: 'coco_usa',       brand: 'Coco Fresh',    img: '🥤', caption: 'Everyday boba at everyday prices 💛', eng: '3.1%', likes: '5.5K' },
+]
+
+// ─── Helper ────────────────────────────────────────────────
+function Arrow({ val, base }: { val: number; base: number }) {
+  const pct = ((val - base) / base) * 100
+  if (Math.abs(pct) < 1) return <span className="text-gray-400">—</span>
+  return pct > 0
+    ? <span className="text-green-500">↑ {pct.toFixed(1)}%</span>
+    : <span className="text-red-400">↓ {Math.abs(pct).toFixed(1)}%</span>
+}
+
+// ─── Main ─────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [data, setData] = useState<CompetitorLatest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+  const [competitors, setCompetitors] = useState<Competitor[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [lastUpdate,  setLastUpdate]  = useState('')
+  const [selected,    setSelected]    = useState<string[]>([])   // for trend chart
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data } = await supabase
       .from('competitor_latest')
       .select('*')
       .order('followers', { ascending: false })
-    setData(rows || [])
-    if (rows?.length) setLastUpdate(rows[0].scraped_at)
+    const comps = (data || []) as Competitor[]
+    setCompetitors(comps)
+    setSelected(comps.slice(0, 4).map(c => c.handle))
+    setLastUpdate(new Date().toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
     setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // ─── Derived stats ──────────────────────────────────────
+  const avgFollowers = competitors.length
+    ? Math.round(competitors.reduce((s, c) => s + c.followers, 0) / competitors.length)
+    : 0
+  const avgEngagement = competitors.length
+    ? +(competitors.reduce((s, c) => s + c.engagement_rate, 0) / competitors.length).toFixed(2)
+    : 0
+  const avgPosts = competitors.length
+    ? +(competitors.reduce((s, c) => s + c.posts_per_week, 0) / competitors.length).toFixed(1)
+    : 0
+
+  // ─── Trend chart data ───────────────────────────────────
+  const trendComps = [
+    { ...SUNRIGHT, isSunright: true },
+    ...competitors.map(c => ({ ...c, isSunright: false })),
+  ]
+
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (29 - i))
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  })
+
+  const trendData = days.map((day, i) => {
+    const row: Record<string, string | number> = { day }
+    trendComps.forEach(c => {
+      if (!selected.includes(c.handle) && !c.isSunright) return
+      const trend = genTrend(c.followers)
+      row[c.handle] = trend[i]
+    })
+    return row
+  })
+
+  function toggleSelected(handle: string) {
+    setSelected(prev =>
+      prev.includes(handle)
+        ? prev.filter(h => h !== handle)
+        : prev.length < 6 ? [...prev, handle] : prev
+    )
   }
 
-  useEffect(() => { load() }, [])
-
-  const maxFollowers = data[0]?.followers || 1
-  const avgEng = data.length
-    ? (data.reduce((s, c) => s + (c.engagement_rate || 0), 0) / data.length).toFixed(1)
-    : '—'
+  const allForChart = [SUNRIGHT, ...competitors]
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="p-4 md:p-6 space-y-7">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">📈 Analytics</h1>
-          <p className="text-sm text-gray-500 mt-0.5">IG 競品追蹤 · Supabase</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">📊 Analytics</h1>
+          <p className="text-sm text-gray-500 mt-0.5">IG 競品分析 · {competitors.length} 競品 · 更新 {lastUpdate || '...'}</p>
         </div>
-        <div className="flex items-center gap-3">
-          {lastUpdate && <span className="text-xs text-gray-400">更新：{new Date(lastUpdate).toLocaleDateString('zh-TW')}</span>}
-          <Button variant="outline" onClick={load}>↻</Button>
-        </div>
+        <button onClick={load} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500">
+          ↻ 重整
+        </button>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: '追蹤競品', value: data.length, color: 'text-blue-600' },
-          { label: '平均互動率', value: avgEng + '%', color: 'text-green-600' },
-          { label: '最多粉絲', value: data[0]?.handle || '—', color: 'text-purple-600' },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="pt-4 pb-4 text-center">
-              <div className={`text-xl font-bold ${s.color}`}>{loading ? '—' : s.value}</div>
-              <div className="text-xs text-gray-500 mt-1">{s.label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Competitor List */}
       {loading ? (
-        <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-      ) : data.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <div className="text-4xl mb-3">📊</div>
-          <div className="font-medium">尚無競品數據</div>
-          <p className="text-sm mt-1">IG Scraper 執行後自動 push 至 Supabase</p>
+        <div className="space-y-4">
+          {[1,2,3].map(i => <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
-        <div className="space-y-3">
-          {data.map((c, idx) => {
-            const pct = Math.round((c.followers / maxFollowers) * 100)
-            return (
-              <div key={c.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="w-7 h-7 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">
-                    {idx + 1}
+        <>
+          {/* ① Comparison Cards */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sunright vs 競品平均</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Followers */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs text-gray-400 mb-1">粉絲數</p>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{SUNRIGHT.followers.toLocaleString()}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Sunright</div>
                   </div>
-                  <div className="flex-1 min-w-[140px]">
-                    <div className="text-sm font-semibold text-blue-600">{c.handle}</div>
-                    <div className="text-xs text-gray-500">{c.name} · <span className="text-gray-400">{c.notes}</span></div>
-                  </div>
-                  <div className="flex gap-5 flex-wrap">
-                    <div className="text-center">
-                      <div className="text-base font-bold text-gray-900">{fmtNum(c.followers)}</div>
-                      <div className="text-xs text-gray-400">粉絲</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-base font-bold text-gray-900">{fmtNum(c.avg_likes)}</div>
-                      <div className="text-xs text-gray-400">均讚</div>
-                    </div>
-                    <div className="text-center">
-                      <div className={`text-base font-bold ${engColor(c.engagement_rate)}`}>{c.engagement_rate ?? '—'}%</div>
-                      <div className="text-xs text-gray-400">互動率</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-base font-bold text-gray-900">{c.posts_per_week ?? '—'}</div>
-                      <div className="text-xs text-gray-400">貼/週</div>
-                    </div>
+                  <div className="text-gray-300 text-lg mb-4">vs</div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-400">{avgFollowers.toLocaleString()}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
                   </div>
                 </div>
-                <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                <div className="mt-2 text-xs">
+                  <Arrow val={SUNRIGHT.followers} base={avgFollowers} />
                 </div>
               </div>
-            )
-          })}
-        </div>
+
+              {/* Engagement */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs text-gray-400 mb-1">互動率</p>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <div className="text-2xl font-bold text-green-600">{SUNRIGHT.engagement_rate}%</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Sunright</div>
+                  </div>
+                  <div className="text-gray-300 text-lg mb-4">vs</div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-400">{avgEngagement}%</div>
+                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs">
+                  <Arrow val={SUNRIGHT.engagement_rate} base={avgEngagement} />
+                </div>
+              </div>
+
+              {/* Posts/week */}
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs text-gray-400 mb-1">週發文數</p>
+                <div className="flex items-end gap-3">
+                  <div>
+                    <div className="text-2xl font-bold text-purple-600">{SUNRIGHT.posts_per_week}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Sunright</div>
+                  </div>
+                  <div className="text-gray-300 text-lg mb-4">vs</div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-400">{avgPosts}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">競品平均</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs">
+                  <Arrow val={SUNRIGHT.posts_per_week} base={avgPosts} />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ② Ranking Table */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">競品排名</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 w-10">#</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">品牌</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">粉絲</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">互動率</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">週發文</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 hidden sm:table-cell">趨勢</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Sunright row — highlighted */}
+                    <tr className="border-b border-blue-100 bg-blue-50/60">
+                      <td className="px-4 py-3 text-xs text-blue-400 font-bold">★</td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-blue-700 text-sm">Sunright Tea Studio</div>
+                        <div className="text-xs text-blue-400">@{SUNRIGHT.handle}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{SUNRIGHT.followers.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-600">{SUNRIGHT.engagement_rate}%</td>
+                      <td className="px-4 py-3 text-right text-gray-600 hidden sm:table-cell">{SUNRIGHT.posts_per_week}</td>
+                      <td className="px-4 py-3 text-right hidden sm:table-cell"><span className="text-green-500 text-xs">↑ 2.1%</span></td>
+                    </tr>
+                    {competitors.map((c, i) => {
+                      const engColor = c.engagement_rate >= 4 ? 'text-green-600' : c.engagement_rate >= 3 ? 'text-yellow-600' : 'text-red-400'
+                      const trend = c.engagement_rate > avgEngagement ? 'up' : 'down'
+                      return (
+                        <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-xs text-gray-400">{i + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{c.name}</div>
+                            <div className="text-xs text-gray-400">@{c.handle}</div>
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-700">{c.followers.toLocaleString()}</td>
+                          <td className={`px-4 py-3 text-right font-medium ${engColor}`}>{c.engagement_rate}%</td>
+                          <td className="px-4 py-3 text-right text-gray-500 hidden sm:table-cell">{c.posts_per_week}</td>
+                          <td className="px-4 py-3 text-right text-xs hidden sm:table-cell">
+                            {trend === 'up'
+                              ? <span className="text-green-500">↑</span>
+                              : <span className="text-red-400">↓</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* ③ Follower Trend Chart */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">粉絲趨勢 — 近 30 天</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 md:p-5 shadow-sm">
+              {/* Brand selector */}
+              <div className="flex flex-wrap gap-2 mb-5">
+                {allForChart.map((c, i) => {
+                  const isSun = c.handle === SUNRIGHT.handle
+                  const color = isSun ? '#6366f1' : CHART_COLORS[i % CHART_COLORS.length]
+                  const isOn  = selected.includes(c.handle) || isSun
+                  return (
+                    <button
+                      key={c.handle}
+                      onClick={() => !isSun && toggleSelected(c.handle)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                        isOn
+                          ? 'text-white border-transparent'
+                          : 'text-gray-400 border-gray-200 hover:border-gray-400'
+                      } ${isSun ? 'cursor-default' : 'cursor-pointer'}`}
+                      style={isOn ? { backgroundColor: color, borderColor: color } : {}}
+                    >
+                      {isSun ? '★ ' : ''}{c.name.split(' ')[0]}
+                      {'handle' in c ? '' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-400 mb-3">最多選 6 個競品對比（Sunright 預設固定）</p>
+
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={trendData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    interval={6}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
+                    width={40}
+                  />
+                  <Tooltip
+                    formatter={(v: unknown) => [(v as number).toLocaleString()]}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                  {/* Sunright always shown */}
+                  <Line
+                    key="sunright"
+                    type="monotone"
+                    dataKey={SUNRIGHT.handle}
+                    stroke="#6366f1"
+                    strokeWidth={2.5}
+                    dot={false}
+                    name="Sunright ★"
+                  />
+                  {competitors
+                    .filter(c => selected.includes(c.handle))
+                    .map((c, i) => (
+                      <Line
+                        key={c.handle}
+                        type="monotone"
+                        dataKey={c.handle}
+                        stroke={CHART_COLORS[(i + 1) % CHART_COLORS.length]}
+                        strokeWidth={1.5}
+                        dot={false}
+                        name={c.name.split(' ').slice(0, 2).join(' ')}
+                      />
+                    ))
+                  }
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          {/* ④ Top Posts */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">競品最新亮眼貼文</h2>
+            <p className="text-xs text-gray-400 -mt-2 mb-3">各競品近期互動率最高貼文 · Mock 示意（Iris 接 IG API 後更新）</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {TOP_POSTS.map(post => (
+                <div key={post.handle} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-yellow-400 flex items-center justify-center text-lg">
+                      {post.img}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 text-sm">{post.brand}</div>
+                      <div className="text-xs text-gray-400">@{post.handle}</div>
+                    </div>
+                  </div>
+
+                  {/* Post thumbnail mock */}
+                  <div className="h-28 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl flex items-center justify-center text-4xl mb-3">
+                    {post.img}
+                  </div>
+
+                  {/* Caption */}
+                  <p className="text-xs text-gray-600 line-clamp-2 mb-2">{post.caption}</p>
+
+                  {/* Metrics */}
+                  <div className="flex gap-3 text-xs">
+                    <span className="text-green-600 font-semibold">{post.eng} 互動率</span>
+                    <span className="text-gray-400">❤️ {post.likes}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </div>
   )
