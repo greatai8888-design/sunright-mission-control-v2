@@ -402,10 +402,10 @@ export default function AnalyticsPage() {
             </div>
           </section>
 
-          {/* ④ Top Posts */}
+          {/* ④ This Week's Top Posts */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Top Competitor Posts</h2>
-            <p className="text-xs text-gray-400 -mt-2 mb-3">Recent high-engagement posts · Mock data (Iris will connect IG API)</p>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">📈 This Week's Top Posts</h2>
+            <p className="text-xs text-gray-400 -mt-2 mb-3">Highest engagement posts from each competitor (last 7 days) · Mock data (Iris will connect IG API)</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {TOP_POSTS.map(post => (
                 <div key={post.handle} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition">
