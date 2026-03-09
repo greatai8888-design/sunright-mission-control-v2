@@ -56,10 +56,10 @@ export default function ReviewsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">⭐ Reviews</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">⭐ Reviews</h1>
           <p className="text-sm text-gray-500 mt-0.5">Google Maps + Yelp 評論監控</p>
         </div>
         <Button variant="outline" onClick={load}>↻ 重新整理</Button>

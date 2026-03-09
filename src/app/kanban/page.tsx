@@ -130,10 +130,10 @@ export default function KanbanPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🗂 Kanban</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">🗂 Kanban</h1>
           <p className="text-sm text-gray-500 mt-0.5">6 欄看板 · 12 Agents · Supabase</p>
         </div>
         <div className="flex gap-2">
@@ -145,11 +145,11 @@ export default function KanbanPage() {
       {loading ? (
         <div className="text-center py-20 text-gray-400">載入中...</div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minWidth: 0 }}>
+        <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory" style={{ minWidth: 0 }}>
           {COLUMNS.map(col => {
             const colTasks = tasks.filter(t => t.status === col.id)
             return (
-              <div key={col.id} className={`flex-shrink-0 w-60 bg-gray-50 rounded-xl border-t-2 ${col.color} p-3`}>
+              <div key={col.id} className={`flex-shrink-0 w-[260px] snap-start bg-gray-50 rounded-xl border-t-2 ${col.color} p-3`}>
                 <div className="flex items-center gap-1.5 mb-3">
                   <span className="text-sm">{col.emoji}</span>
                   <span className="font-semibold text-gray-700 text-sm">{col.label}</span>

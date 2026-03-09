@@ -58,10 +58,10 @@ export default function AnalyticsPage() {
     : '—'
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📈 Analytics</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">📈 Analytics</h1>
           <p className="text-sm text-gray-500 mt-0.5">IG 競品追蹤 · Supabase</p>
         </div>
         <div className="flex items-center gap-3">
@@ -71,7 +71,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: '追蹤競品', value: data.length, color: 'text-blue-600' },
           { label: '平均互動率', value: avgEng + '%', color: 'text-green-600' },

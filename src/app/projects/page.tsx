@@ -54,10 +54,10 @@ export default function ProjectsPage() {
   const byStatus = (s: string) => projects.filter(p => p.status === s)
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🗂 Projects</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">🗂 Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">項目管理 · Supabase</p>
         </div>
         <Button onClick={() => setOpen(true)}>+ 新增項目</Button>

@@ -218,27 +218,29 @@ export default function DocsPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-52 border-r border-gray-100 bg-white flex-shrink-0 overflow-y-auto pt-6 pb-6">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest px-4 mb-3">文件目錄</p>
+    <div className="flex flex-col md:flex-row md:h-[calc(100vh-0px)] overflow-hidden">
+      {/* Section tabs — horizontal on mobile, vertical sidebar on desktop */}
+      <div className="md:w-52 border-b md:border-b-0 md:border-r border-gray-100 bg-white flex-shrink-0 overflow-x-auto md:overflow-y-auto pt-4 md:pt-6 pb-2 md:pb-6">
+        <div className="flex md:flex-col gap-1 px-3 md:px-0 min-w-max md:min-w-0">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-4 mb-2 hidden md:block">文件目錄</p>
         {DOCS.map(d => (
           <button
             key={d.section}
             onClick={() => setActiveSection(d.section)}
-            className={`w-full text-left px-4 py-2.5 text-sm font-medium transition ${
+            className={`whitespace-nowrap md:w-full text-left px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm font-medium rounded-lg md:rounded-none transition ${
               activeSection === d.section
-                ? 'text-gray-900 bg-gray-50 border-r-2 border-gray-900'
+                ? 'text-gray-900 bg-gray-100 md:bg-gray-50 md:border-r-2 md:border-gray-900'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             {d.section}
           </button>
         ))}
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">{activeSection}</h1>
 
         <div className="space-y-3 max-w-3xl">

@@ -103,11 +103,11 @@ export default function BrainPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🧠 Second Brain</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">🧠 Second Brain</h1>
           <p className="text-sm text-gray-500 mt-0.5">Sunright AI 知識庫 · {entries.length} 條目</p>
         </div>
         <button
