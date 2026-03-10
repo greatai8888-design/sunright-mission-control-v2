@@ -15,6 +15,7 @@ const navItems = [
   { href: '/brain',      label: 'Second Brain',   icon: '🧠' },
   { href: '/docs',       label: 'Docs',           icon: '📝' },
   { href: '/projects',   label: 'Projects',       icon: '🗂' },
+  { href: '/inventory',  label: 'Inventory',      icon: '📦' },
 ]
 
 export function AppSidebar() {
