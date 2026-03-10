@@ -5,7 +5,9 @@ export const dynamic = 'force-dynamic'
 import { Card, CardContent } from '@/components/ui/card'
 
 // ─── Mock data — replace with Supabase when table is ready ─
+// (Alhambra items are real, scraped 2026-03-09 via toast-inventory.py)
 const OUT_OF_STOCK: { store: string; items: string[] }[] = [
+  { store: 'Alhambra', items: ['Strawberry Honey Boba Milk', 'Lemon Yakult w/ Tea Jelly', 'Blueberry Crunch', 'Cream Pudding Milk Tea', 'Signature Coffee (16oz)', 'Orange Americano', 'Brown Sugar Espresso Boba Oat Latte'] },
   { store: 'Koreatown', items: ['Brown Sugar Boba Milk', 'Taro Latte'] },
   { store: 'Arcadia',   items: ['Cheese Foam Green Tea'] },
 ]
