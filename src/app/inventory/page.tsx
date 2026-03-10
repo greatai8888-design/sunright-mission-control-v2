@@ -19,7 +19,7 @@ export default function InventoryPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">📦 Inventory</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Out-of-stock alerts · Updated {LAST_UPDATED}</p>
+          <p className="text-sm text-gray-500 mt-0.5">Out-of-stock alerts · Toast Tab · Updated {LAST_UPDATED}</p>
         </div>
         <button className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500">
           ↻ Refresh
